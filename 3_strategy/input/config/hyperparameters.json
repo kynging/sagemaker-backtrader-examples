@@ -1,0 +1,8 @@
+{ 
+    "user" : "user",
+    "long_threshold" : "0.5",
+    "short_threshold" : "1",
+    "profit_target_pct" : "2.00",
+    "stop_target_pct" : "1.00",
+    "size" : "80"
+}

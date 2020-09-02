@@ -1,0 +1,116 @@
+#!/usr/bin/env python
+from __future__ import print_function
+
+import os
+import sys
+import traceback
+import math
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+
+from keras.layers import Dropout, Dense
+from keras.wrappers.scikit_learn import KerasClassifier
+from keras.models import Sequential
+from keras.wrappers.scikit_learn import KerasRegressor
+
+# Optional
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+# These are the paths to where SageMaker mounts interesting things in your container.
+prefix = '/opt/ml/'
+
+input_path = os.path.join(prefix, 'input/data/training/data_train.csv')
+test_path = os.path.join(prefix, 'input/data/training/data_test.csv')
+output_path = os.path.join(prefix, 'output')
+model_path = os.path.join(prefix, 'model')
+
+
+# Process and prepare the data
+def data_process(df, yLen, b):
+    
+    dataX = []
+    dataY = []
+    for idx, row in df.iterrows():
+        row1 = []
+        r = row[1:len(row)-yLen]
+        for a in r:
+            row1.append(a)
+        x = np.array(row1, dtype=float)
+        y = np.array(row[len(row)-yLen:], dtype=float)
+        b = len(x)
+        dataX.append(x)
+        dataY.append(y)
+        
+    dataX = np.array(dataX)
+    dataY = np.array(dataY)
+    
+    return dataX, dataY, b
+
+
+def build_classifier(b, yLen):
+    
+    print("build_classifier:b=%s,yLen=%s" % (b, yLen))
+    model = Sequential()
+    model.add(Dense(b, input_dim=b, kernel_initializer='normal', activation='relu'))
+    model.add(Dropout(0.2))
+    model.add(Dense(int(b/2), kernel_initializer='normal', activation='relu'))
+    model.add(Dropout(0.2))
+    model.add(Dense(yLen,kernel_initializer='normal', activation='sigmoid'))
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+    
+    return model
+
+
+def generate_model(dataX, dataY, b, yLen):
+    
+    model = build_classifier(b, yLen)
+    model.fit(dataX, dataY, epochs=100, batch_size=1)
+    scores = model.evaluate(dataX, dataY, verbose=0)
+    print("Training Data %s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
+    
+    return model
+
+
+def train():
+    
+    print('Starting the training.')
+    
+    yLen = 2
+    b = 0
+    
+    try:
+        
+        df = pd.read_csv(input_path)
+        dataX, dataY, b = data_process(df, yLen, b)
+        print('b:', b, 'yLen:', yLen)
+        model = generate_model(dataX, dataY, b, yLen)
+        model.save(os.path.join(model_path, 'model.h5'))
+        
+        print('Training is complete. Model saved.')
+        
+        df = pd.read_csv(test_path)
+        dataX, dataY, b = data_process(df, yLen, b)
+        print('b:', b, 'yLen:', yLen)
+        scores = model.evaluate(dataX, dataY, verbose=0)
+        print("Test Data %s: %.2f%%" % (model.metrics_names[1], scores[1]*100))
+        
+    except Exception as e:
+        # Write out an error file. This will be returned as the failure
+        # Reason in the DescribeTrainingJob result.
+        trc = traceback.format_exc()
+        with open(os.path.join(output_path, 'failure'), 'w') as s:
+            s.write('Exception during training: ' + str(e) + '\n' + trc)
+        # Printing this causes the exception to be in the training job logs
+        print(
+            'Exception during training: ' + str(e) + '\n' + trc,
+            file=sys.stderr)
+        # A non-zero exit code causes the training job to be marked as Failed.
+        sys.exit(255)
+
+        
+if __name__ == '__main__':
+    train()
+
+    # A zero exit code causes the job to be marked a Succeeded.
+    sys.exit(0)
