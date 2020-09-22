@@ -10,7 +10,7 @@ import time
 
 
 # 从 Athena 中调取数据的函数
-def get_query_result(QueryString):
+def get_query_result(QueryString, output_bucket):
  
     athena = boto3.client('athena')
     s3 = boto3.client('s3')
@@ -18,7 +18,7 @@ def get_query_result(QueryString):
     def execute_query(QueryString):
 
         ResultConfiguration = dict([])
-        ResultConfiguration['OutputLocation'] = 's3://athena-output-cache/'
+        ResultConfiguration['OutputLocation'] = 's3://{}/'.format(output_bucket)
         response = athena.start_query_execution(QueryString=QueryString, ResultConfiguration=ResultConfiguration)
         QueryExecutionId = response['QueryExecutionId']
 
@@ -38,7 +38,7 @@ def get_query_result(QueryString):
 
     output_location = execute_query(QueryString)
 #     print(output_location)
-    response = s3.get_object(Bucket='athena-output-cache', Key=output_location.split('/')[-1])
+    response = s3.get_object(Bucket=output_bucket, Key=output_location.split('/')[-1])
     df = pd.read_csv(response['Body'])
     
     return df
